@@ -1,0 +1,4 @@
+root:x:0:
+nogroup:x:65534:
+natsumi:x:1001:
+natsumi-shared:x:2000:natsumi
