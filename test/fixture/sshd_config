@@ -1,0 +1,30 @@
+# A configuration in the shape the image is run with: sshd as the one user who logs in, not root,
+# with a read-only root filesystem. The user of the image passes its own; this one is for test/run.sh.
+Port 2222
+ListenAddress 0.0.0.0
+ListenAddress ::
+PidFile none
+
+HostKey /etc/natsumi-sshd-keys/ssh_host_ed25519_key
+AuthorizedKeysFile /etc/natsumi-sshd-authorized/authorized_keys
+StrictModes no
+AllowUsers natsumi
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+UsePAM no
+
+AllowTcpForwarding no
+AllowStreamLocalForwarding no
+AllowAgentForwarding no
+X11Forwarding no
+PermitTunnel no
+GatewayPorts no
+PermitUserEnvironment no
+PermitUserRC no
+PrintMotd no
+PrintLastLog no
+
+Subsystem sftp internal-sftp -u 007
+LogLevel INFO

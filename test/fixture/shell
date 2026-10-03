@@ -1,0 +1,7 @@
+#!/bin/bash
+# The login shell: sshd always adds 022 to its umask, so set the group-writable one again here.
+umask 007
+if [ $# -eq 0 ]; then
+  exec -l /bin/bash
+fi
+exec /bin/bash "$@"
