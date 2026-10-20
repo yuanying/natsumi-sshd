@@ -1,0 +1,61 @@
+# Once a week, releases the next patch version when the image's content changed since the latest vX.Y.Z tag.
+# The image's content is the Dockerfile alone: it copies nothing from the checkout. Changes to the workflows,
+# renovate.json, test/ or README.md release nothing. With no such change, the run ends here without a release.
+#
+# The image is built, tested and pushed by image.yml before the tag is pushed, so a failed build leaves no tag behind.
+# A tag pushed by hand still releases through image.yml as before.
+name: Release
+
+on:
+  schedule:
+    - cron: "0 0 * * 1" # Monday 09:00 JST
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: next
+        run: |
+          version="$(.github/release/next-version.sh Dockerfile)"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "next version: ${version:-none}"
+
+  image:
+    needs: plan
+    if: needs.plan.outputs.version != ''
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ needs.plan.outputs.version }}
+
+  tag:
+    needs: [plan, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # The commit the image was built from: github.sha is the same in every job of this run.
+      - run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$VERSION" -f sha="$GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
