@@ -52,6 +52,12 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
+### 週に一度のリリース
+
+`.github/workflows/release.yml` が毎週月曜 09:00 JST に動く。最新の `vX.Y.Z` の tag から main の HEAD までに `Dockerfile` が変わっていれば、パッチ版を一つ上げた版（`v0.1.0` の次は `v0.1.1`）で image を確かめて push し、そのあとで tag を打つ。image の中身は `Dockerfile` だけで決まるので、workflow・`renovate.json`・`test/`・`README.md` だけの変更ではリリースしない。変わっていなければ何もしない。Actions の画面から `workflow_dispatch` で手でも動かせる。
+
+依存の更新は Renovate（`renovate.json`）が PR にする。パッチ版とダイジェストの更新は、PR の確かめが通れば Renovate がマージする。
+
 ### package を public にする
 
 ghcr の package は、最初の push で private になることがある。package の公開範囲は REST API では変えられないので、最初のリリースのあとに GitHub の画面で変える。
