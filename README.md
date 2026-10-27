@@ -41,7 +41,9 @@ test/run.sh natsumi-sshd:test
 - `FETCH_URL`（たとえば `https://github.com/<ユーザー>.keys`）を渡すと、そこから鍵を取れることも確かめる。
 - docker のデーモンから見えない `/tmp` で動かしている場合は、`TMPDIR` を見える場所にする。
 
-pull request と main への push では、GitHub Actions（`.github/workflows/image.yml`）が build と `test/run.sh` を行う。push はしない。
+pull request と main への push では、GitHub Actions（`.github/workflows/image.yml`）が build と `test/run.sh` を行う。pull request では push しない。
+
+main への push では、確かめたあと `ghcr.io/yuanying/natsumi-sshd:main` を push する。脆弱性の集計役がこれをスキャンし、main で直ったがリリースされていないものを見分ける。どの image にも `org.opencontainers.image.source` と、build したコミットの `org.opencontainers.image.revision` のラベルが付く。`:main` を上書きして tag の外れた古い image は、続くジョブ（`cleanup`、[dataaxiom/ghcr-cleanup-action](https://github.com/dataaxiom/ghcr-cleanup-action)）が消す。tag の付いた image は消さない。
 
 ## リリース
 
