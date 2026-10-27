@@ -1,5 +1,7 @@
 # Builds the image and runs test/run.sh on every pull request and on main. A version tag (v1.2.3) also pushes
-# ghcr.io/<owner>/natsumi-sshd:1.2.3 and :latest. Only tag pushes reach the package write permission.
+# ghcr.io/<owner>/natsumi-sshd:1.2.3 and :latest. A push to main pushes :main, which a vulnerability scanner reads to
+# tell a fix already on main from one already released; the images it leaves untagged are then deleted. Pull
+# requests never reach the package write permission.
 # release.yml calls this with a version as well: a tag pushed by its GITHUB_TOKEN starts no workflow, so it pushes
 # the image itself, from the commit it is about to tag, before the tag exists.
 name: Image
@@ -41,7 +43,9 @@ jobs:
           FETCH_URL: https://github.com/${{ github.repository_owner }}.keys
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.version != ''
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') || inputs.version != '' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -57,8 +61,11 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/natsumi-sshd
           # v1.2.3 -> 1.2.3, and latest for a version without a pre-release part. The version is the pushed tag's,
-          # or the one release.yml gives.
-          tags: type=semver,pattern={{version}},value=${{ inputs.version || github.ref_name }}
+          # or the one release.yml gives. A push to main is tagged main alone. The default labels carry
+          # org.opencontainers.image.source and .revision (the full commit SHA) for every one of them.
+          tags: |
+            type=semver,pattern={{version}},value=${{ inputs.version || github.ref_name }},enable=${{ github.ref_type == 'tag' || inputs.version != '' }}
+            type=raw,value=main,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -74,3 +81,24 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
+
+  # Each push to main moves :main and leaves the previous image untagged. Tagged images are never deleted. The action
+  # deletes an image together with its platform and attestation manifests, so no tagged image loses a child.
+  cleanup:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      packages: write
+    # The action is not safe to run twice at once against the same package.
+    concurrency:
+      group: ghcr-cleanup
+      cancel-in-progress: false
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          package: natsumi-sshd
+          delete-untagged: true
+          # Afterwards, warns of any multi-arch image left without a platform child.
+          validate: true
