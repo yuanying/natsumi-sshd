@@ -58,6 +58,21 @@ git push origin v0.1.0
 
 `.github/workflows/release.yml` が毎週月曜 09:00 JST に動く。最新の `vX.Y.Z` の tag から main の HEAD までに `Dockerfile` が変わっていれば、パッチ版を一つ上げた版（`v0.1.0` の次は `v0.1.1`）で image を確かめて push し、そのあとで tag を打つ。image の中身は `Dockerfile` だけで決まるので、workflow・`renovate.json`・`test/`・`README.md` だけの変更ではリリースしない。変わっていなければ何もしない。Actions の画面から `workflow_dispatch` で手でも動かせる。
 
+### 脆弱性の直しのすぐのリリース
+
+脆弱性対応の係（vuln-responder）が出した直しの PR（ブランチ名が `vuln-responder/` で始まる）を main にマージすると、同じ `release.yml` がすぐに動き、週を待たずに次のパッチ版を出す。出し方は週次と同じで、main の HEAD から image を確かめて push し、最後に tag を打つ。係は tag を打たない。
+
+すぐに出すのは、最新の `vX.Y.Z` 以降に `Dockerfile` を変えたコミット（マージコミットを除く）の作者が、すべて `renovate[bot]` か `fraction-vuln-responder[bot]` のときだけである（`.github/release/blocking-commits.sh`）。人のコミットが一つでもあれば出さず、その run の job summary に止めたコミットの一覧と、手で出すコマンド（`gh workflow run release.yml --ref main`）を書く。`Dockerfile` を変えないコミット（workflow や README）は image に入らないので数えない。`Dockerfile` が変わっていなければ何もしない。
+
+週次のリリースは作者を見ずに `Dockerfile` の変更で出すので、すぐのリリースが失敗しても、直しは次の月曜に出る。
+
+スクリプトのテストは次で動かす。
+
+```sh
+.github/release/next-version_test.sh
+.github/release/blocking-commits_test.sh
+```
+
 依存の更新は Renovate（`renovate.json`）が PR にする。パッチ版とダイジェストの更新は、PR の確かめが通れば Renovate がマージする。
 
 ### package を public にする

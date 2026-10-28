@@ -2,6 +2,12 @@
 # The image's content is the Dockerfile alone: it copies nothing from the checkout. Changes to the workflows,
 # renovate.json, test/ or README.md release nothing. With no such change, the run ends here without a release.
 #
+# A vulnerability fix is released at once instead of waiting for the week: when a pull request from a branch starting
+# with vuln-responder/ is merged into main, main is released the same way, provided every commit since the latest
+# vX.Y.Z tag that changed the Dockerfile is Renovate's or the vuln-responder bot's (blocking-commits.sh). A person's
+# change is left to a release by hand, and the run's summary lists the commits that held it back. The weekly release
+# takes either bot's commits alike, as it takes any change to the Dockerfile.
+#
 # The image is built, tested and pushed by image.yml before the tag is pushed, so a failed build leaves no tag behind.
 # A tag pushed by hand still releases through image.yml as before.
 name: Release
@@ -10,32 +16,75 @@ on:
   schedule:
     - cron: "0 0 * * 1" # Monday 09:00 JST
   workflow_dispatch:
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 permissions: {}
 
+# One release at a time, the weekly and the immediate alike. Any other pull request closed meanwhile gets a group of
+# its own, so that it does not take the place of a release waiting here.
 concurrency:
-  group: release
+  group: >-
+    ${{ (github.event_name != 'pull_request' ||
+    (github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'vuln-responder/')))
+    && 'release' || format('release-skipped-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
   plan:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name != 'pull_request' && github.ref == 'refs/heads/main') ||
+      (github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'vuln-responder/'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
     outputs:
       version: ${{ steps.next.outputs.version }}
+      sha: ${{ steps.next.outputs.sha }}
     steps:
+      # main as it is now, for a merged pull request too: every tag is on main, so the latest one is behind it.
       - uses: actions/checkout@v7
         with:
+          ref: main
           fetch-depth: 0
           persist-credentials: false
       - id: next
         run: |
+          sha="$(git rev-parse HEAD)"
           version="$(.github/release/next-version.sh Dockerfile)"
-          echo "version=$version" >>"$GITHUB_OUTPUT"
           echo "next version: ${version:-none}"
+          if [ "$EVENT" = pull_request ]; then
+            if [ -z "$version" ]; then
+              echo "Nothing to release: the Dockerfile is unchanged since the latest version." >>"$GITHUB_STEP_SUMMARY"
+            else
+              blocking="$(.github/release/blocking-commits.sh Dockerfile)"
+              if [ -n "$blocking" ]; then
+                {
+                  echo "## $version is not released at once"
+                  echo
+                  echo "These commits since the latest version changed the Dockerfile and are neither Renovate's nor the vuln-responder bot's:"
+                  echo
+                  echo '```'
+                  echo "$blocking"
+                  echo '```'
+                  echo
+                  echo "Once they are reviewed, release $version from main by hand (the image first, then the tag):"
+                  echo
+                  echo '```sh'
+                  echo "gh workflow run release.yml --repo $GITHUB_REPOSITORY --ref main"
+                  echo '```'
+                } >>"$GITHUB_STEP_SUMMARY"
+                echo "held back by: $blocking"
+                version=""
+              fi
+            fi
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+        env:
+          EVENT: ${{ github.event_name }}
 
   image:
     needs: plan
@@ -46,6 +95,7 @@ jobs:
     uses: ./.github/workflows/image.yml
     with:
       version: ${{ needs.plan.outputs.version }}
+      sha: ${{ needs.plan.outputs.sha }}
 
   tag:
     needs: [plan, image]
@@ -54,8 +104,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      # The commit the image was built from: github.sha is the same in every job of this run.
-      - run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$VERSION" -f sha="$GITHUB_SHA"
+      # The commit the image was built from.
+      - run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$VERSION" -f sha="$SHA"
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.plan.outputs.version }}
+          SHA: ${{ needs.plan.outputs.sha }}
