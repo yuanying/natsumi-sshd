@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "The patch, digest and pinning updates Renovate merges wait for the pull request's checks, which build the image and run test/run.sh against it",
-  "extends": ["github>yuanying/renovate-config", "github>yuanying/renovate-config:automerge-patch"],
+  "description": "Every update gets GitHub's auto-merge through platform-automerge and is merged once a code owner in .github/CODEOWNERS approves it and the pull request's checks pass, which build the image and run test/run.sh against it",
+  "extends": ["github>yuanying/renovate-config", "github>yuanying/renovate-config:platform-automerge"],
   "packageRules": [
     {
       "description": "The base image is pulled by a tag that is pushed again whenever Ubuntu rebuilds it, so a checkout does not say which image a release was built from. Pinning the digest states it in the Dockerfile, and a rebuild upstream arrives as a digest update that changes the Dockerfile and so leads to the next weekly release",
