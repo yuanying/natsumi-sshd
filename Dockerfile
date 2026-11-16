@@ -1,6 +1,6 @@
 # sshd and the tools to look at and fix files over ssh. Only the tools: the configuration (sshd_config,
 # the login shell, passwd and group, the host key and the authorized keys) is given by whoever runs the image.
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+FROM ubuntu:24.04@sha256:73b999393d07f2bf65a40373778a44dc9a6d54ad7718d29247d8ff9413c4d6a8
 
 LABEL org.opencontainers.image.source=https://github.com/yuanying/natsumi-sshd
 
